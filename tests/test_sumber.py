@@ -99,6 +99,7 @@ class YDLPalsu:
 
     def __init__(self, opsi):
         self.opsi = opsi
+        YDLPalsu.opsi_terakhir = opsi
 
     def __enter__(self):
         return self
@@ -136,6 +137,11 @@ def test_unduh_youtube_memakai_ulang_file_yang_sudah_ada(ydl_palsu, tmp_path):
     assert pertama == kedua == (tmp_path / "video_sumber_abc123.mp4", "Judul YT")
     assert len(ydl_palsu.unduhan) == 1
     assert lain.exists()
+
+
+def test_unduh_youtube_link_dari_playlist_hanya_ambil_satu_video(ydl_palsu, tmp_path):
+    sumber._unduh_youtube("https://www.youtube.com/watch?v=abc123&list=PLxyz", tmp_path)
+    assert ydl_palsu.opsi_terakhir["noplaylist"] is True
 
 
 @pytest.mark.parametrize("info", [

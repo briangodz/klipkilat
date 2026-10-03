@@ -35,6 +35,7 @@ def _unduh_youtube(url: str, folder: Path) -> tuple[Path, str]:
         "format": FORMAT_YT,
         "merge_output_format": "mp4",
         "outtmpl": str(folder / "video_sumber_%(id)s.%(ext)s"),
+        "noplaylist": True,  # link dari dalam playlist (&list=...) → ambil videonya saja
         "quiet": True,
         "noprogress": True,
     }
@@ -75,9 +76,10 @@ def _unduh_dengan_ulang(url: str, folder: Path, pengunduh, jeda: float) -> tuple
             if percobaan == 1:
                 time.sleep(jeda)
     raise KlipKilatError(
-        "Gagal mengunduh video dari YouTube. Kemungkinan videonya privat, dibatasi umur, "
-        "atau YouTube sedang memblokir server Colab.\n"
-        "Solusi: unduh videonya sendiri, lalu upload (kosongkan kolom sumber) atau taruh di Google Drive.",
+        "Gagal mengunduh video dari YouTube. Paling sering karena YouTube memblokir server Colab "
+        "(\"Sign in to confirm you're not a bot\"), atau videonya privat/dibatasi umur.\n"
+        "Solusi paling andal: unduh videonya di komputermu, upload ke Google Drive, lalu isi kolom sumber "
+        "dengan path-nya, contoh: /content/drive/MyDrive/podcast.mp4",
         repr(terakhir),
     ) from terakhir
 

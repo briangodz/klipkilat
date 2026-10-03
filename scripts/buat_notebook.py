@@ -129,7 +129,7 @@ else:
 
 MASALAH = """## 🛠️ Kalau ada masalah
 - **GPU belum aktif** → Runtime → Change runtime type → T4 GPU → Save, lalu jalankan ulang dari sel 1.
-- **Gagal mengunduh dari YouTube** → unduh videonya sendiri, lalu upload (kosongkan `sumber`) atau taruh di Google Drive.
+- **Gagal mengunduh dari YouTube** ("Sign in to confirm you're not a bot") → YouTube sering memblokir server Colab. Unduh videonya di komputermu, upload ke Google Drive, lalu isi `sumber` dengan `/content/drive/MyDrive/nama_file.mp4`.
 - **Kuota Gemini habis / key tidak valid** → isi `timestamp_manual`, lalu jalankan ulang sel 2. Transkrip tidak dibuat ulang selama runtime belum dihapus.
 - **`hasil.zip` tidak terunduh otomatis** → buka panel 📁 di kiri → `klipkilat_kerja` → klik kanan `hasil.zip` → Download.
 - **Sesi terputus** → jalankan ulang sel 1 dan sel 2.

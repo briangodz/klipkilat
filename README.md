@@ -35,7 +35,7 @@
 ## Kalau ada masalah
 
 - **GPU belum aktif**: Runtime → Change runtime type → T4 GPU.
-- **YouTube gagal diunduh**: upload videonya sendiri atau taruh di Google Drive.
+- **YouTube gagal diunduh** ("Sign in to confirm you're not a bot"): YouTube sering memblokir server Colab. Unduh videonya di komputermu, upload ke Google Drive, lalu isi `sumber` dengan `/content/drive/MyDrive/nama_file.mp4`.
 - **Kuota Gemini habis**: isi `timestamp_manual`. Transkrip tidak dibuat ulang.
 - **`hasil.zip` tidak terunduh otomatis**: buka panel 📁 di kiri Colab → `klipkilat_kerja` → klik kanan `hasil.zip` → Download.
 - **Bug lain**: buka [Issue](https://github.com/briangodz/klipkilat/issues) dan lampirkan `log.txt`.
