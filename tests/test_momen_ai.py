@@ -93,6 +93,14 @@ def test_waktu_berformat_jam_diterima(tr):
     assert [(m.judul, m.mulai, m.selesai) for m in hasil] == [("Satu", 3.7, 15.3)]
 
 
+@pytest.mark.parametrize("nilai,detik", [
+    (65, 65.0), (65.5, 65.5), ("65.5", 65.5), ("00:01:05", 65.0), ("01:05", 65.0),
+    ("00:01:05.5", 65.5), ("01:05.5", 65.5),
+])
+def test_ke_detik(nilai, detik):
+    assert momen._ke_detik(nilai) == detik
+
+
 @pytest.mark.parametrize("nilai", [float("nan"), "nan", float("inf"), "1e1", True])
 def test_waktu_tidak_wajar_dibuang(tr, nilai):
     isi = json.dumps([{"judul": "rusak", "mulai_detik": nilai, "selesai_detik": 15},
@@ -125,6 +133,8 @@ class ErrorAPI(Exception):
     (ErrorAPI(400, "API key not valid. Please pass a valid API key."), "key"),
     (ErrorAPI(403, "PERMISSION_DENIED"), "key"),
     (ErrorAPI(404, "models/xyz is not found"), "model"),
+    (ErrorAPI(None, "models/xyz is not found for API version v1beta"), "model"),
+    (OSError("host not found"), "lain"),
     (ErrorAPI(503, "UNAVAILABLE"), "sibuk"),
     (ErrorAPI(500, "INTERNAL"), "sibuk"),
     (ErrorAPI(None, "The model is overloaded. Please try again later."), "sibuk"),

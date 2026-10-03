@@ -175,7 +175,13 @@ def _ke_detik(nilai) -> float:
         raise TypeError("boolean bukan waktu")
     if isinstance(nilai, str):
         teks = nilai.strip()
-        detik = float(teks) if re.fullmatch(r"\d+(?:\.\d+)?", teks) else parse_waktu(teks)
+        pecahan = re.fullmatch(r"(\d+(?::\d+){1,2})(\.\d+)", teks)  # '01:05.5' = 65,5 detik, bukan 1.05.5
+        if re.fullmatch(r"\d+(?:\.\d+)?", teks):
+            detik = float(teks)
+        elif pecahan:
+            detik = parse_waktu(pecahan[1]) + float(pecahan[2])
+        else:
+            detik = parse_waktu(teks)
     elif isinstance(nilai, (int, float)):
         detik = float(nilai)
     else:
@@ -228,7 +234,7 @@ def _klasifikasi_error(e: Exception) -> GagalAI:
                               "lalu tempel ulang.", pesan)
     if kode in (500, 502, 503, 504) or "UNAVAILABLE" in pesan or "overloaded" in pesan.lower():
         return GagalAI("sibuk", "Server Gemini sedang sibuk. Tunggu 1–2 menit lalu jalankan ulang sel 2.", pesan)
-    if kode == 404 or "not found" in pesan.lower():
+    if kode == 404 or ("not found" in pesan.lower() and "model" in pesan.lower()):
         return GagalAI("model", "Model Gemini yang dipakai sudah tidak tersedia. "
                                 "Laporkan di https://github.com/briangodz/klipkilat/issues", pesan)
     return GagalAI("lain", "Gagal menghubungi Gemini.", f"{type(e).__name__}: {pesan}")
