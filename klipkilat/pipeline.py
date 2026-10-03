@@ -141,6 +141,7 @@ def _proses(p: Pengaturan, folder_kerja: Path, folder_hasil: Path,
             gagal.append(f"Klip {i} ({m.judul}): {pesan}")
             nomor_gagal.add(i)
             path_srt.unlink(missing_ok=True)
+            (folder_hasil / f"{nama}.mp4").unlink(missing_ok=True)
 
     if not berhasil:
         raise KlipKilatError("Semua klip gagal dibuat. Lihat log.txt untuk detailnya.")

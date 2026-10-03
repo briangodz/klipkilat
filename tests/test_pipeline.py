@@ -62,6 +62,20 @@ def test_satu_klip_gagal_yang_lain_tetap_jalan(lingkungan, tmp_path):
         assert "gagal dibuat" in z.read("momen.md").decode("utf-8")
 
 
+def test_mp4_setengah_jadi_dihapus_saat_render_gagal(lingkungan, tmp_path, monkeypatch):
+    def render_palsu(video, m, path_ass, gaya, keluaran, folder_font):
+        keluaran.write_bytes(b"mp4 setengah jadi")
+        if keluaran.name == "klip_01.mp4":
+            raise KlipKilatError("Perintah ffmpeg gagal.", "disk penuh")
+        return keluaran
+
+    monkeypatch.setattr(render, "render_klip", render_palsu)
+    hasil = pipeline.jalankan(_p(tmp_path, timestamp_manual="00:05-00:15, 00:20-00:30"), tampil=lambda s: None)
+    with zipfile.ZipFile(hasil.path_zip) as z:
+        nama = z.namelist()
+    assert "klip_01.mp4" not in nama and "klip_02.mp4" in nama
+
+
 def test_semua_klip_gagal(lingkungan, tmp_path):
     lingkungan["render_gagal"] = {1, 2}
     with pytest.raises(KlipKilatError) as info:
