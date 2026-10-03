@@ -20,9 +20,9 @@ Tool dijalankan sebagai **notebook Google Colab**. Pengguna tidak perlu menginst
 
 **Alur:**
 1. Pengguna membuka tombol "Open in Colab" di README GitHub.
-2. Pengguna mengisi form Colab (kolom `#@param`) tanpa menyentuh kode.
-3. Pengguna klik **Runtime → Run all**.
-4. Pengguna mengunduh `hasil.zip`. Kalau Google Drive terhubung, salinannya juga disimpan ke Drive.
+2. Form Colab (kolom `#@param`) bisa diisi tanpa menyentuh kode.
+3. Pengguna menjalankan sel 1️⃣ Persiapan, lalu mengisi form dan menjalankan sel 2️⃣ Pengaturan.
+4. Pengguna mengunduh `hasil.zip` (terunduh otomatis). Salinan ke Google Drive bersifat opt-in: hanya kalau `simpan_ke_drive` dicentang, salinannya disimpan ke `MyDrive/KlipKilat`.
 
 **Isian form:**
 
@@ -35,6 +35,7 @@ Tool dijalankan sebagai **notebook Google Colab**. Pengguna tidak perlu menginst
 | `gaya_vertikal` | `blur` | `blur` (video utuh di tengah, latar blur) atau `crop` (potong tengah) |
 | `gemini_api_key` | kosong | Opsional. Kalau kosong, pengguna memakai mode timestamp manual. |
 | `timestamp_manual` | kosong | Contoh: `01:23:10-01:24:00, 02:05:00-02:05:45`. Dipakai kalau tidak ada API key, atau kalau diisi (mengalahkan pilihan AI). |
+| `simpan_ke_drive` | tidak dicentang | Checkbox. Kalau dicentang, Google Drive dihubungkan dan `hasil.zip` juga disalin ke `MyDrive/KlipKilat` (opt-in). |
 
 **Isi `hasil.zip`:**
 - `klip_01.mp4`, `klip_02.mp4`, … : 1080×1920, H.264 + AAC, subtitle sudah tertanam
@@ -57,6 +58,7 @@ klipkilat/
 │   ├── pipeline.py      orkestrasi seluruh alur + dataclass Pengaturan
 │   ├── model.py         dataclass data bersama (Kata, Segmen, Transkrip, Momen, Video)
 │   ├── kesalahan.py     KlipKilatError + pesan error berbahasa Indonesia
+│   ├── proses.py        jalankan FFmpeg/ffprobe, ubah kegagalannya jadi KlipKilatError
 │   ├── sumber.py        ambil video (YouTube / Drive / upload), ekstrak audio
 │   ├── transkrip.py     Whisper → kata + timestamp, cache ke JSON
 │   ├── momen.py         pilih momen (Gemini atau manual), validasi, rapikan
@@ -82,16 +84,21 @@ klipkilat/
 
 | Fungsi | Masukan → Keluaran |
 |---|---|
-| `sumber.ambil_video(sumber, folder_kerja)` | URL/path → `Video`. Audio diekstrak ke WAV 16 kHz mono. |
-| `transkrip.buat_transkrip(video, bahasa, perangkat)` | → `Transkrip`. Disimpan ke `transkrip.json`, dengan nama berdasarkan hash file audio. Kalau file itu sudah ada, langsung dibaca tanpa transkrip ulang. |
-| `momen.pilih_dengan_ai(transkrip, jumlah, dmin, dmaks, api_key)` | → `list[Momen]` (sudah divalidasi dan dirapikan) |
+| `model.py` | Dataclass `Kata`, `Segmen`, `Transkrip` (`semua_kata()`, `ke_dict()`, `dari_dict()`), `Momen` (`durasi`), `Video`; `format_jam(detik)` → `"jj:mm:dd"` |
+| `proses.jalankan(args, cwd=None)` | Menjalankan program (stdin ditutup) → stdout; kode keluar ≠ 0 → `KlipKilatError` berisi stderr. Juga `cek_ffmpeg()`, `durasi(path)`, `punya_audio(path)`, `ukuran_video(path)` |
+| `sumber.ambil_video(sumber, folder_kerja, pengunduh=_unduh_youtube, jeda=3.0)` | URL/path → `Video`. Audio diekstrak ke WAV 16 kHz mono. |
+| `transkrip.buat_transkrip(video, bahasa, perangkat, folder_kerja, nama_model=None, transkriptor=None, kemajuan=None)` | → `Transkrip`. Disimpan ke `transkrip_<hash>_<bahasa>_<model>.json` di folder kerja. Kalau file itu sudah ada (dan bisa dibaca), langsung dipakai tanpa transkrip ulang. |
+| `momen.pilih_dengan_ai(transkrip, jumlah, dmin, dmaks, panggil_llm, judul_video="")` | → `list[Momen]` (sudah divalidasi dan dirapikan). `panggil_llm(prompt) -> str` disuntikkan. |
+| `momen.buat_klien_gemini(api_key, model=MODEL_GEMINI, jeda=(5, 15), tidur=time.sleep)` | → fungsi `panggil_llm` untuk Gemini; error API diubah jadi `GagalAI`, server sibuk dicoba ulang |
 | `momen.dari_teks_manual(teks, transkrip)` | → `list[Momen]` |
-| `momen.rapikan(momen_list, transkrip, dmin, dmaks)` | Validasi + geser titik potong ke batas segmen + buang yang bertumpuk |
-| `subtitle.buat_ass(transkrip, momen, lebar, tinggi)` | → teks file `.ass`, timestamp relatif terhadap awal klip |
+| `momen.rapikan(momen_list, transkrip, dmin, dmaks, manual=False)` | Validasi + geser titik potong ke batas segmen + buang yang bertumpuk |
+| `subtitle.buat_ass(transkrip, momen, nama_font="Montserrat ExtraBold")` | → teks file `.ass` (1080×1920), timestamp relatif terhadap awal klip |
 | `subtitle.buat_srt(transkrip, momen)` | → teks file `.srt` |
-| `render.render_klip(video, momen, path_ass, gaya, keluaran)` | → path `.mp4` |
-| `paket.buat_zip(folder_hasil)` | → path `hasil.zip` |
-| `pipeline.jalankan(pengaturan)` | Menjalankan semuanya dan mengembalikan `Hasil(zip, klip_berhasil, klip_gagal, peringatan)` |
+| `render.siapkan_font(folder_font, unduh=_unduh)` | → nama font yang dipakai (Montserrat ExtraBold, atau DejaVu Sans kalau unduhan gagal) |
+| `render.render_klip(video, momen, path_ass, gaya, keluaran, folder_font)` | → path `.mp4` |
+| `paket.tulis_momen_md(momen_list, judul_video, path, gagal=frozenset())` | Menulis `momen.md` |
+| `paket.buat_zip(folder_hasil, path_zip)` | → `path_zip` |
+| `pipeline.jalankan(pengaturan, tampil=print)` | Menjalankan semuanya dan mengembalikan `Hasil(path_zip, klip_berhasil, klip_gagal, peringatan, momen)` |
 
 ### 3.3 Detail tiap bagian
 
