@@ -9,7 +9,7 @@ class KlipKilatError(Exception):
 
 
 class GagalAI(KlipKilatError):
-    """Gagal memakai Gemini. jenis: 'key', 'kuota', 'format', atau 'lain'."""
+    """Gagal memakai Gemini. jenis: 'key', 'kuota', 'sibuk', 'model', 'format', atau 'lain'."""
 
     def __init__(self, jenis: str, pesan_pengguna: str, detail_teknis: str = ""):
         super().__init__(pesan_pengguna, detail_teknis)

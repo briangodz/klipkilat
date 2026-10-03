@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import re
+import time
 from typing import Callable
 
 from .kesalahan import GagalAI, KlipKilatError
@@ -15,7 +16,7 @@ log = logging.getLogger("klipkilat")
 PADDING = 0.3
 CONTOH_MANUAL = "01:23:10-01:24:00, 02:05:00-02:05:45"
 
-MODEL_GEMINI = "gemini-3.8-flash"  # Flash stabil terbaru berkuota gratis per dokumen Google (Task 6 Step 1)
+MODEL_GEMINI = "gemini-3.8-flash"  # model Flash stabil (dicek di ai.google.dev, Okt 2026)
 PERCOBAAN_AI = 3
 
 PROMPT = """Kamu adalah editor video pendek (TikTok/Reels/Shorts) yang jago menemukan momen viral.
@@ -216,6 +217,8 @@ def pilih_dengan_ai(transkrip: Transkrip, jumlah: int, dmin: float, dmaks: float
 
 
 def _klasifikasi_error(e: Exception) -> GagalAI:
+    if isinstance(e, ImportError):
+        return GagalAI("lain", "Library Gemini belum terpasang. Jalankan ulang sel 1️⃣ Persiapan.", repr(e))
     kode = getattr(e, "code", None)
     pesan = str(e)
     if kode == 429 or "RESOURCE_EXHAUSTED" in pesan:
@@ -223,16 +226,31 @@ def _klasifikasi_error(e: Exception) -> GagalAI:
     if kode in (401, 403) or (kode == 400 and "API key" in pesan):
         return GagalAI("key", "API key Gemini tidak valid. Buat key baru di https://aistudio.google.com/apikey "
                               "lalu tempel ulang.", pesan)
+    if kode in (500, 502, 503, 504) or "UNAVAILABLE" in pesan or "overloaded" in pesan.lower():
+        return GagalAI("sibuk", "Server Gemini sedang sibuk. Tunggu 1–2 menit lalu jalankan ulang sel 2.", pesan)
+    if kode == 404 or "not found" in pesan.lower():
+        return GagalAI("model", "Model Gemini yang dipakai sudah tidak tersedia. "
+                                "Laporkan di https://github.com/briangodz/klipkilat/issues", pesan)
     return GagalAI("lain", "Gagal menghubungi Gemini.", f"{type(e).__name__}: {pesan}")
 
 
-def buat_klien_gemini(api_key: str, model: str = MODEL_GEMINI) -> Callable[[str], str]:
-    def panggil(prompt: str) -> str:
+def _klien_genai(api_key: str):
+    from google import genai
+
+    return genai.Client(api_key=api_key)
+
+
+def buat_klien_gemini(api_key: str, model: str = MODEL_GEMINI, jeda: tuple[float, ...] = (5, 15),
+                      tidur: Callable[[float], None] = time.sleep) -> Callable[[str], str]:
+    klien = None
+
+    def sekali(prompt: str) -> str:
+        nonlocal klien
         try:
-            from google import genai
             from google.genai import types
 
-            klien = genai.Client(api_key=api_key)
+            if klien is None:
+                klien = _klien_genai(api_key)
             respons = klien.models.generate_content(
                 model=model,
                 contents=prompt,
@@ -241,5 +259,16 @@ def buat_klien_gemini(api_key: str, model: str = MODEL_GEMINI) -> Callable[[str]
             return respons.text or ""
         except Exception as e:
             raise _klasifikasi_error(e) from e
+
+    def panggil(prompt: str) -> str:
+        for detik in jeda:
+            try:
+                return sekali(prompt)
+            except GagalAI as e:
+                if e.jenis != "sibuk":
+                    raise
+                log.warning("Gemini sibuk (%s), mencoba lagi dalam %s detik", e.detail_teknis, detik)
+                tidur(detik)
+        return sekali(prompt)
 
     return panggil

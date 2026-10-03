@@ -1,5 +1,6 @@
 import json
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -123,7 +124,10 @@ class ErrorAPI(Exception):
     (ErrorAPI(429, "RESOURCE_EXHAUSTED"), "kuota"),
     (ErrorAPI(400, "API key not valid. Please pass a valid API key."), "key"),
     (ErrorAPI(403, "PERMISSION_DENIED"), "key"),
-    (ErrorAPI(404, "models/xyz is not found"), "lain"),
+    (ErrorAPI(404, "models/xyz is not found"), "model"),
+    (ErrorAPI(503, "UNAVAILABLE"), "sibuk"),
+    (ErrorAPI(500, "INTERNAL"), "sibuk"),
+    (ErrorAPI(None, "The model is overloaded. Please try again later."), "sibuk"),
     (ValueError("aneh"), "lain"),
 ])
 def test_klasifikasi_error(error, jenis):
@@ -132,8 +136,71 @@ def test_klasifikasi_error(error, jenis):
     assert hasil.jenis == jenis
 
 
+def test_klasifikasi_pesan_sibuk_dan_model():
+    assert "sibuk" in momen._klasifikasi_error(ErrorAPI(503, "UNAVAILABLE")).pesan_pengguna
+    assert "issues" in momen._klasifikasi_error(ErrorAPI(404, "not found")).pesan_pengguna
+
+
+def test_klasifikasi_library_belum_terpasang():
+    hasil = momen._klasifikasi_error(ImportError("No module named 'google.genai'"))
+    assert hasil.jenis == "lain"
+    assert "sel 1" in hasil.pesan_pengguna
+
+
 def test_klien_gemini_tanpa_library_jadi_gagal_ai(monkeypatch):
     monkeypatch.setitem(sys.modules, "google.genai", None)
     panggil = momen.buat_klien_gemini("key-palsu")
-    with pytest.raises(GagalAI):
+    with pytest.raises(GagalAI) as info:
         panggil("halo")
+    assert "sel 1" in info.value.pesan_pengguna
+
+
+class KlienPalsu:
+    def __init__(self, *hasil):
+        self.hasil = list(hasil)
+        self.panggilan = 0
+        self.models = self
+
+    def generate_content(self, model, contents, config):
+        self.panggilan += 1
+        r = self.hasil.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return SimpleNamespace(text=r)
+
+
+def _pasang_klien(monkeypatch, klien):
+    dibuat = []
+    monkeypatch.setattr(momen, "_klien_genai", lambda key: dibuat.append(key) or klien)
+    return dibuat
+
+
+def test_klien_gemini_mencoba_ulang_saat_sibuk(monkeypatch):
+    klien = KlienPalsu(ErrorAPI(503, "UNAVAILABLE"), ErrorAPI(503, "overloaded"), "[]")
+    dibuat = _pasang_klien(monkeypatch, klien)
+    tidur = []
+    panggil = momen.buat_klien_gemini("key-palsu", jeda=(5, 15), tidur=tidur.append)
+    assert panggil("halo") == "[]"
+    assert tidur == [5, 15]
+    assert klien.panggilan == 3
+    assert dibuat == ["key-palsu"]
+
+
+def test_klien_gemini_menyerah_kalau_tetap_sibuk(monkeypatch):
+    klien = KlienPalsu(*[ErrorAPI(503, "UNAVAILABLE")] * 3)
+    _pasang_klien(monkeypatch, klien)
+    tidur = []
+    with pytest.raises(GagalAI) as info:
+        momen.buat_klien_gemini("key-palsu", jeda=(5, 15), tidur=tidur.append)("halo")
+    assert info.value.jenis == "sibuk"
+    assert tidur == [5, 15] and klien.panggilan == 3
+
+
+def test_klien_gemini_kuota_tidak_dicoba_ulang(monkeypatch):
+    klien = KlienPalsu(ErrorAPI(429, "RESOURCE_EXHAUSTED"), "[]")
+    _pasang_klien(monkeypatch, klien)
+    tidur = []
+    with pytest.raises(GagalAI) as info:
+        momen.buat_klien_gemini("key-palsu", tidur=tidur.append)("halo")
+    assert info.value.jenis == "kuota"
+    assert tidur == [] and klien.panggilan == 1
