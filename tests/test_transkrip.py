@@ -83,3 +83,33 @@ def test_simpan_muat(tmp_path, buat_tr):
     tr = buat_tr([(0, 10, KALIMAT_PANJANG)])
     transkrip.simpan(tr, tmp_path / "t.json")
     assert transkrip.muat(tmp_path / "t.json") == tr
+
+
+def test_simpan_atomik_tanpa_sisa_tmp(tmp_path, buat_tr, monkeypatch):
+    diganti = []
+    asli = transkrip.os.replace
+    monkeypatch.setattr(transkrip.os, "replace", lambda a, b: diganti.append((str(a), str(b))) or asli(a, b))
+    tr = buat_tr([(0, 10, KALIMAT_PANJANG)])
+    transkrip.simpan(tr, tmp_path / "t.json")
+    assert diganti == [(str(tmp_path / "t.json.tmp"), str(tmp_path / "t.json"))]
+    assert list(tmp_path.glob("*.tmp")) == []
+    assert transkrip.muat(tmp_path / "t.json") == tr
+
+
+@pytest.mark.parametrize("isi_rusak", ['{"bahasa": "id", "dur', '{"bahasa": "id"}', "[1, 2]", ""])
+def test_cache_rusak_dianggap_tidak_ada(tmp_path, buat_tr, isi_rusak):
+    tr = buat_tr([(0, 10, KALIMAT_PANJANG)])
+    panggilan = []
+
+    def palsu(audio, bahasa, perangkat, nama_model, compute):
+        panggilan.append(bahasa)
+        return tr
+
+    v = _video(tmp_path)
+    transkrip.buat_transkrip(v, "id", "cpu", tmp_path, transkriptor=palsu)
+    (cache,) = tmp_path.glob("transkrip_*.json")
+    cache.write_text(isi_rusak, encoding="utf-8")
+
+    assert transkrip.buat_transkrip(v, "id", "cpu", tmp_path, transkriptor=palsu) == tr
+    assert panggilan == ["id", "id"]
+    assert transkrip.muat(cache) == tr

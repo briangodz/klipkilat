@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 
 from .kesalahan import KlipKilatError
@@ -39,7 +40,10 @@ def _hash_file(path: Path) -> str:
 
 
 def simpan(tr: Transkrip, path: Path) -> None:
-    Path(path).write_text(json.dumps(tr.ke_dict(), ensure_ascii=False), encoding="utf-8")
+    path = Path(path)
+    sementara = path.with_suffix(path.suffix + ".tmp")
+    sementara.write_text(json.dumps(tr.ke_dict(), ensure_ascii=False), encoding="utf-8")
+    os.replace(sementara, path)
 
 
 def muat(path: Path) -> Transkrip:
@@ -71,8 +75,14 @@ def buat_transkrip(video: Video, bahasa: str, perangkat: str, folder_kerja: Path
     kunci = f"{_hash_file(video.path_audio)[:12]}_{bahasa}_{nama_model}"
     cache = Path(folder_kerja) / f"transkrip_{kunci}.json"
     if cache.exists():
-        log.info("Memakai transkrip tersimpan: %s", cache.name)
-        return muat(cache)
+        try:
+            tr = muat(cache)
+        except (ValueError, KeyError, TypeError) as e:
+            log.warning("Transkrip tersimpan rusak, dibuat ulang: %s (%r)", cache.name, e)
+            cache.unlink(missing_ok=True)
+        else:
+            log.info("Memakai transkrip tersimpan: %s", cache.name)
+            return tr
 
     log.info("Transkrip dengan model %s di %s", nama_model, perangkat)
     try:
