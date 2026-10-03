@@ -75,6 +75,17 @@ def test_tanpa_key_dan_tanpa_manual(lingkungan, tmp_path):
     assert "timestamp_manual" in info.value.pesan_pengguna
 
 
+def test_tanpa_key_dan_tanpa_manual_gagal_sebelum_unduh(lingkungan, tmp_path, monkeypatch):
+    def jangan_unduh(s, folder):
+        raise AssertionError("video tidak boleh diambil")
+
+    monkeypatch.setattr(sumber, "ambil_video", jangan_unduh)
+    with pytest.raises(KlipKilatError) as info:
+        pipeline.jalankan(_p(tmp_path, gemini_api_key="  ", timestamp_manual=" "), tampil=lambda s: None)
+    assert "timestamp_manual" in info.value.pesan_pengguna
+    assert "gemini_api_key" in info.value.pesan_pengguna
+
+
 def test_ai_berhasil(lingkungan, tmp_path, monkeypatch):
     jawaban = json.dumps([{"judul": "Seru", "mulai_detik": 10, "selesai_detik": 20, "alasan": "hook"}])
     monkeypatch.setattr(modul_momen, "buat_klien_gemini", lambda key: (lambda prompt: jawaban))

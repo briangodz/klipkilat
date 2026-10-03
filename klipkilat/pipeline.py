@@ -57,6 +57,9 @@ def _validasi(p: Pengaturan) -> None:
         raise KlipKilatError("bahasa harus 'id', 'en', atau 'auto'.")
     if p.gaya_vertikal not in ("blur", "crop"):
         raise KlipKilatError("gaya_vertikal harus 'blur' atau 'crop'.")
+    if not p.gemini_api_key.strip() and not p.timestamp_manual.strip():
+        raise KlipKilatError("Isi gemini_api_key untuk memilih momen otomatis, atau isi timestamp_manual. "
+                             f"Contoh: {modul_momen.CONTOH_MANUAL}")
 
 
 def jalankan(p: Pengaturan, tampil: Callable[[str], None] = print) -> Hasil:
