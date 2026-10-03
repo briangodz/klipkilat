@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Callable
 
@@ -18,7 +19,8 @@ MODEL_GEMINI = "gemini-3.8-flash"  # Flash stabil terbaru berkuota gratis per do
 PERCOBAAN_AI = 3
 
 PROMPT = """Kamu adalah editor video pendek (TikTok/Reels/Shorts) yang jago menemukan momen viral.
-Di bawah ini transkrip video berjudul "{judul}". Setiap baris diawali waktu mulai [jj:mm:dd].
+Di bawah ini transkrip video berjudul "{judul}". Setiap baris diawali waktu mulai dalam format [jj:mm:dd | detik],
+contoh [00:01:05 | 65.0 dtk] berarti mulai di detik ke-65.
 
 Pilih {jumlah} momen terbaik untuk dijadikan klip pendek. Syarat setiap momen:
 - Berdiri sendiri: penonton paham tanpa menonton video lengkapnya.
@@ -30,6 +32,8 @@ Urutkan dari momen yang paling berpotensi viral.
 Jawab HANYA dengan JSON berupa daftar objek dengan kunci:
 "judul" (judul klip yang menarik, maksimal 60 karakter), "mulai_detik" (angka), "selesai_detik" (angka),
 "alasan" (1 kalimat kenapa momen ini menarik).
+"mulai_detik" dan "selesai_detik" WAJIB berupa angka dalam DETIK, diambil dari label detik di transkrip
+(contoh: 65.0, bukan "00:01:05").
 Tulis "judul" dan "alasan" dalam bahasa yang sama dengan transkrip.
 
 TRANSKRIP:
@@ -151,7 +155,7 @@ def rapikan(momen_list: list[Momen], transkrip: Transkrip, dmin: float, dmaks: f
 
 
 def _format_transkrip(transkrip: Transkrip) -> str:
-    return "\n".join(f"[{format_jam(s.mulai)}] {s.teks}" for s in transkrip.segmen)
+    return "\n".join(f"[{format_jam(s.mulai)} | {s.mulai:.1f} dtk] {s.teks}" for s in transkrip.segmen)
 
 
 def _ambil_json(teks: str) -> list:
@@ -164,12 +168,28 @@ def _ambil_json(teks: str) -> list:
     return data
 
 
+def _ke_detik(nilai) -> float:
+    """Angka, string angka ('65.5'), atau string jam ('00:01:05') → detik. NaN/inf ditolak."""
+    if isinstance(nilai, bool):
+        raise TypeError("boolean bukan waktu")
+    if isinstance(nilai, str):
+        teks = nilai.strip()
+        detik = float(teks) if re.fullmatch(r"\d+(?:\.\d+)?", teks) else parse_waktu(teks)
+    elif isinstance(nilai, (int, float)):
+        detik = float(nilai)
+    else:
+        raise TypeError(f"tipe waktu tidak dikenali: {type(nilai).__name__}")
+    if not math.isfinite(detik):
+        raise ValueError("waktu tidak terhingga")
+    return detik
+
+
 def _ke_momen(item) -> Momen | None:
     try:
         return Momen(
             str(item.get("judul") or "Momen").strip()[:80],
-            float(item["mulai_detik"]),
-            float(item["selesai_detik"]),
+            _ke_detik(item["mulai_detik"]),
+            _ke_detik(item["selesai_detik"]),
             str(item.get("alasan") or "").strip(),
         )
     except (AttributeError, KeyError, TypeError, ValueError):

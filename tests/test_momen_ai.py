@@ -49,7 +49,8 @@ def test_prompt_berisi_transkrip_dan_pengaturan(tr):
     llm = LLMPalsu(jawaban(("Satu", 4, 15)))
     momen.pilih_dengan_ai(tr, 3, 8, 12, llm, judul_video="Podcast Uji")
     prompt = llm.prompt[0]
-    assert "[00:00:04] e f g h i" in prompt
+    assert "[00:00:04 | 4.0 dtk] e f g h i" in prompt
+    assert "[jj:mm:dd | detik]" in prompt
     assert "Podcast Uji" in prompt
     assert "3 momen" in prompt
     assert "8" in prompt and "12" in prompt
@@ -81,6 +82,20 @@ def test_ai_menyerah_setelah_tiga_kali(tr):
 
 def test_item_tidak_valid_dibuang(tr):
     isi = json.dumps([{"judul": "rusak"}, {"judul": "Satu", "mulai_detik": 4, "selesai_detik": 15}])
+    hasil = momen.pilih_dengan_ai(tr, 5, 8, 12, LLMPalsu(isi))
+    assert [m.judul for m in hasil] == ["Satu"]
+
+
+def test_waktu_berformat_jam_diterima(tr):
+    isi = json.dumps([{"judul": "Satu", "mulai_detik": "00:00:04", "selesai_detik": "15"}])
+    hasil = momen.pilih_dengan_ai(tr, 5, 8, 12, LLMPalsu(isi))
+    assert [(m.judul, m.mulai, m.selesai) for m in hasil] == [("Satu", 3.7, 15.3)]
+
+
+@pytest.mark.parametrize("nilai", [float("nan"), "nan", float("inf"), "1e1", True])
+def test_waktu_tidak_wajar_dibuang(tr, nilai):
+    isi = json.dumps([{"judul": "rusak", "mulai_detik": nilai, "selesai_detik": 15},
+                      {"judul": "Satu", "mulai_detik": 4, "selesai_detik": 15}])
     hasil = momen.pilih_dengan_ai(tr, 5, 8, 12, LLMPalsu(isi))
     assert [m.judul for m in hasil] == ["Satu"]
 
