@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "klipkilat"
+version = "0.1.0"
+description = "Cari momen seru + subtitle otomatis gaya TikTok untuk clipper Indonesia"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "faster-whisper>=1.1.0",
+    "google-genai>=1.0.0",
+    "yt-dlp",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["klipkilat"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not e2e'"
+markers = ["e2e: uji alur lengkap dengan Whisper sungguhan (tidak dijalankan di CI)"]
