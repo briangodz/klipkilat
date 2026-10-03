@@ -30,7 +30,8 @@ FILTER = {
 
 
 def _unduh(url: str, tujuan: Path) -> None:
-    urllib.request.urlretrieve(url, tujuan)
+    with urllib.request.urlopen(url, timeout=30) as r:
+        tujuan.write_bytes(r.read())
 
 
 def siapkan_font(folder_font: Path, unduh=_unduh) -> str:
