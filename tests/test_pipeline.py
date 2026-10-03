@@ -123,6 +123,49 @@ def test_peringatan_tanpa_gpu(lingkungan, tmp_path, monkeypatch):
     assert any("GPU" in p for p in hasil.peringatan)
 
 
+def test_transkrip_gpu_gagal_dicoba_ulang_di_cpu(lingkungan, tmp_path, monkeypatch):
+    perangkat_dipakai = []
+
+    def transkrip_palsu(video, bahasa, perangkat, folder, nama_model=None, **k):
+        perangkat_dipakai.append(perangkat)
+        if perangkat == "cuda":
+            raise KlipKilatError("Gagal membuat transkrip.", "CUDA driver error")
+        return lingkungan["tr"]
+
+    monkeypatch.setattr(modul_transkrip, "buat_transkrip", transkrip_palsu)
+    hasil = pipeline.jalankan(_p(tmp_path, timestamp_manual="00:05-00:15"), tampil=lambda s: None)
+    assert perangkat_dipakai == ["cuda", "cpu"]
+    assert len(hasil.klip_berhasil) == 1
+    assert any("CPU" in p for p in hasil.peringatan)
+
+
+def test_transkrip_gagal_di_cpu_juga_diteruskan(lingkungan, tmp_path, monkeypatch):
+    perangkat_dipakai = []
+
+    def transkrip_palsu(video, bahasa, perangkat, folder, nama_model=None, **k):
+        perangkat_dipakai.append(perangkat)
+        raise KlipKilatError("Gagal membuat transkrip.", perangkat)
+
+    monkeypatch.setattr(modul_transkrip, "buat_transkrip", transkrip_palsu)
+    with pytest.raises(KlipKilatError) as info:
+        pipeline.jalankan(_p(tmp_path, timestamp_manual="00:05-00:15"), tampil=lambda s: None)
+    assert perangkat_dipakai == ["cuda", "cpu"]
+    assert info.value.detail_teknis == "cpu"
+
+
+def test_video_tanpa_ucapan_tidak_dicoba_ulang_di_cpu(lingkungan, tmp_path, monkeypatch):
+    perangkat_dipakai = []
+
+    def transkrip_palsu(video, bahasa, perangkat, folder, nama_model=None, **k):
+        perangkat_dipakai.append(perangkat)
+        raise KlipKilatError(modul_transkrip.PESAN_SEDIKIT_UCAPAN)
+
+    monkeypatch.setattr(modul_transkrip, "buat_transkrip", transkrip_palsu)
+    with pytest.raises(KlipKilatError):
+        pipeline.jalankan(_p(tmp_path, timestamp_manual="00:05-00:15"), tampil=lambda s: None)
+    assert perangkat_dipakai == ["cuda"]
+
+
 @pytest.mark.parametrize("ubah", [
     {"jumlah_klip": 0}, {"jumlah_klip": 16}, {"durasi_min": 60, "durasi_maks": 30},
     {"bahasa": "jp"}, {"gaya_vertikal": "miring"}, {"sumber": "  "},

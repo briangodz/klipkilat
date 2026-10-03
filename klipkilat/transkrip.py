@@ -12,6 +12,9 @@ from .model import Kata, Segmen, Transkrip, Video
 log = logging.getLogger("klipkilat")
 
 MIN_KATA = 20
+PESAN_SEDIKIT_UCAPAN = (
+    "Video ini tidak berisi ucapan yang cukup untuk ditranskrip (mungkin hanya musik atau hening)."
+)
 
 
 def deteksi_perangkat() -> str:
@@ -84,9 +87,6 @@ def buat_transkrip(video: Video, bahasa: str, perangkat: str, folder_kerja: Path
 
     jumlah_kata = len(tr.semua_kata())
     if jumlah_kata < MIN_KATA:
-        raise KlipKilatError(
-            "Video ini tidak berisi ucapan yang cukup untuk ditranskrip (mungkin hanya musik atau hening).",
-            f"jumlah kata: {jumlah_kata}",
-        )
+        raise KlipKilatError(PESAN_SEDIKIT_UCAPAN, f"jumlah kata: {jumlah_kata}")
     simpan(tr, cache)
     return tr

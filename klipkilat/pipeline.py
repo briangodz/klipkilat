@@ -108,7 +108,14 @@ def _proses(p: Pengaturan, folder_kerja: Path, folder_hasil: Path,
         ingatkan("GPU tidak aktif, transkrip akan lambat dan kurang akurat. "
                  "Aktifkan GPU: Runtime → Change runtime type → T4 GPU.")
     tampil("📝 Membuat transkrip (langkah paling lama)...")
-    tr = modul_transkrip.buat_transkrip(video, p.bahasa, perangkat, folder_kerja, nama_model=p.model_whisper)
+    try:
+        tr = modul_transkrip.buat_transkrip(video, p.bahasa, perangkat, folder_kerja, nama_model=p.model_whisper)
+    except KlipKilatError as e:
+        if perangkat != "cuda" or e.pesan_pengguna == modul_transkrip.PESAN_SEDIKIT_UCAPAN:
+            raise
+        log.error("Transkrip di GPU gagal: %s", e.detail_teknis)
+        ingatkan("Transkrip di GPU gagal, mencoba ulang di CPU (lebih lambat).")
+        tr = modul_transkrip.buat_transkrip(video, p.bahasa, "cpu", folder_kerja, nama_model=p.model_whisper)
 
     tampil("🔎 Menentukan momen...")
     daftar = _tentukan_momen(p, tr, video.judul, ingatkan)
