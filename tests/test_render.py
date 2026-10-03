@@ -60,3 +60,12 @@ def test_gaya_tidak_dikenal(tmp_path):
     with pytest.raises(KlipKilatError):
         render.render_klip(Video(tmp_path, tmp_path, 1, "x"), Momen("x", 0, 1),
                            tmp_path / "a.ass", "miring", tmp_path / "o.mp4", tmp_path)
+
+
+def test_render_hanya_memetakan_audio_pertama(tmp_path, monkeypatch):
+    perintah = []
+    monkeypatch.setattr(proses, "jalankan", lambda args, cwd=None: perintah.append(args) or "")
+    render.render_klip(Video(tmp_path / "v.mp4", tmp_path / "a.wav", 10, "x"), Momen("x", 0, 1),
+                       tmp_path / "a.ass", "crop", tmp_path / "o.mp4", tmp_path)
+    args = perintah[0]
+    assert args[args.index("[v]") + 2] == "0:a:0?"

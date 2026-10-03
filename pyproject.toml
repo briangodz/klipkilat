@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "klipkilat"
 version = "0.1.0"
 description = "Cari momen seru + subtitle otomatis gaya TikTok untuk clipper Indonesia"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "faster-whisper==1.2.1",

@@ -1,7 +1,7 @@
 import pytest
 
 from klipkilat import subtitle
-from klipkilat.model import Momen
+from klipkilat.model import Kata, Momen, Segmen, Transkrip
 
 
 @pytest.fixture
@@ -57,3 +57,19 @@ def test_srt(tr):
 def test_format_waktu():
     assert subtitle._waktu_ass(3725.456) == "1:02:05.46"
     assert subtitle._waktu_srt(3725.456) == "01:02:05,456"
+
+
+def test_kelompok_bertumpuk_dipotong_sampai_kelompok_berikutnya():
+    # Whisper kadang memberi waktu kata yang bertumpuk antar-segmen.
+    tr = Transkrip("id", 5.0, [
+        Segmen("a b", 0.0, 2.0, [Kata("a", 0.0, 1.0), Kata("b", 1.0, 2.0)]),
+        Segmen("c", 1.5, 3.0, [Kata("c", 1.5, 3.0)]),
+    ])
+    m = Momen("x", 0, 3)
+    assert subtitle.buat_srt(tr, m) == (
+        "1\n00:00:00,000 --> 00:00:01,500\na b\n\n"
+        "2\n00:00:01,500 --> 00:00:03,000\nc\n"
+    )
+    dialog = [b for b in subtitle.buat_ass(tr, m).splitlines() if b.startswith("Dialogue:")]
+    assert dialog[1].startswith("Dialogue: 0,0:00:01.00,0:00:01.50,")
+    assert dialog[2].startswith("Dialogue: 0,0:00:01.50,0:00:03.00,")

@@ -34,6 +34,16 @@ def kelompokkan(transkrip: Transkrip, momen: Momen) -> list[list[Kata]]:
     return grup
 
 
+def _dengan_batas_akhir(daftar_grup: list[list[Kata]]):
+    """Pasangkan tiap grup dengan waktu akhirnya; tidak boleh melewati awal grup berikutnya
+    (waktu kata dari Whisper kadang bertumpuk antar-segmen)."""
+    for i, grup in enumerate(daftar_grup):
+        akhir = grup[-1].selesai
+        if i + 1 < len(daftar_grup):
+            akhir = min(akhir, daftar_grup[i + 1][0].mulai)
+        yield grup, akhir
+
+
 def _relatif(t: float, momen: Momen) -> float:
     return min(max(t - momen.mulai, 0.0), momen.durasi)
 
@@ -60,10 +70,10 @@ def _bersihkan(teks: str) -> str:
 
 def buat_ass(transkrip: Transkrip, momen: Momen, nama_font: str = "Montserrat ExtraBold") -> str:
     baris = []
-    for grup in kelompokkan(transkrip, momen):
+    for grup, batas in _dengan_batas_akhir(kelompokkan(transkrip, momen)):
         for i, aktif in enumerate(grup):
             mulai = _relatif(aktif.mulai, momen)
-            akhir = grup[i + 1].mulai if i + 1 < len(grup) else aktif.selesai
+            akhir = grup[i + 1].mulai if i + 1 < len(grup) else batas
             selesai = _relatif(akhir, momen)
             if selesai <= mulai:
                 continue
@@ -80,8 +90,8 @@ def buat_ass(transkrip: Transkrip, momen: Momen, nama_font: str = "Montserrat Ex
 
 def buat_srt(transkrip: Transkrip, momen: Momen) -> str:
     entri = []
-    for grup in kelompokkan(transkrip, momen):
-        mulai, selesai = _relatif(grup[0].mulai, momen), _relatif(grup[-1].selesai, momen)
+    for grup, batas in _dengan_batas_akhir(kelompokkan(transkrip, momen)):
+        mulai, selesai = _relatif(grup[0].mulai, momen), _relatif(batas, momen)
         if selesai <= mulai:
             continue
         teks = " ".join(k.teks for k in grup)

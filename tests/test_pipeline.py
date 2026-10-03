@@ -167,6 +167,17 @@ def test_transkrip_gagal_di_cpu_juga_diteruskan(lingkungan, tmp_path, monkeypatc
     assert info.value.detail_teknis == "cpu"
 
 
+def test_kemajuan_transkrip_ditampilkan(lingkungan, tmp_path, monkeypatch):
+    def transkrip_palsu(video, bahasa, perangkat, folder, nama_model=None, kemajuan=None):
+        kemajuan("📝 Transkrip 50%")
+        return lingkungan["tr"]
+
+    monkeypatch.setattr(modul_transkrip, "buat_transkrip", transkrip_palsu)
+    tampilan = []
+    pipeline.jalankan(_p(tmp_path, timestamp_manual="00:05-00:15"), tampil=tampilan.append)
+    assert "📝 Transkrip 50%" in tampilan
+
+
 def test_video_tanpa_ucapan_tidak_dicoba_ulang_di_cpu(lingkungan, tmp_path, monkeypatch):
     perangkat_dipakai = []
 

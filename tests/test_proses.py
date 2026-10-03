@@ -41,3 +41,15 @@ def test_cek_ffmpeg_tidak_ada(monkeypatch):
     with pytest.raises(KlipKilatError) as info:
         proses.cek_ffmpeg()
     assert "ffmpeg" in info.value.pesan_pengguna
+
+
+def test_stdin_tidak_diwarisi(monkeypatch):
+    dipanggil = {}
+
+    def run_palsu(args, **k):
+        dipanggil.update(k)
+        return proses.subprocess.CompletedProcess(args, 0, "ok", "")
+
+    monkeypatch.setattr(proses.subprocess, "run", run_palsu)
+    assert proses.jalankan(["ffmpeg", "-version"]) == "ok"
+    assert dipanggil["stdin"] is proses.subprocess.DEVNULL

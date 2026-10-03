@@ -1,4 +1,5 @@
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -113,3 +114,40 @@ def test_cache_rusak_dianggap_tidak_ada(tmp_path, buat_tr, isi_rusak):
     assert transkrip.buat_transkrip(v, "id", "cpu", tmp_path, transkriptor=palsu) == tr
     assert panggilan == ["id", "id"]
     assert transkrip.muat(cache) == tr
+
+
+class WhisperPalsu:
+    """Pengganti faster_whisper.WhisperModel: tidak memuat model sungguhan."""
+
+    opsi = {}
+
+    def __init__(self, nama, device, compute_type):
+        pass
+
+    def transcribe(self, audio, **opsi):
+        WhisperPalsu.opsi = opsi
+        segmen = [
+            SimpleNamespace(text=f" kalimat {i}", start=i * 10.0, end=i * 10.0 + 10,
+                            words=[SimpleNamespace(word=f" k{i}_{j}", start=i * 10.0 + j, end=i * 10.0 + j + 1)
+                                   for j in range(5)])
+            for i in range(5)
+        ]
+        return iter(segmen), SimpleNamespace(language="id", duration=50.0)
+
+
+@pytest.fixture
+def whisper_palsu(monkeypatch):
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=WhisperPalsu))
+    return WhisperPalsu
+
+
+def test_whisper_melaporkan_kemajuan(tmp_path, whisper_palsu):
+    pesan = []
+    tr = transkrip.buat_transkrip(_video(tmp_path), "id", "cpu", tmp_path, kemajuan=pesan.append)
+    assert len(tr.semua_kata()) == 25
+    assert pesan == [f"📝 Transkrip {p}%" for p in (20, 40, 60, 80, 100)]
+    assert whisper_palsu.opsi["condition_on_previous_text"] is False
+
+
+def test_whisper_tanpa_kemajuan(tmp_path, whisper_palsu):
+    assert len(transkrip.buat_transkrip(_video(tmp_path), "id", "cpu", tmp_path).semua_kata()) == 25

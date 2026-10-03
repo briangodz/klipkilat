@@ -21,7 +21,7 @@ def cek_ffmpeg() -> None:
 def jalankan(args: list[str], cwd: Path | None = None) -> str:
     try:
         hasil = subprocess.run(
-            [str(a) for a in args], cwd=cwd, capture_output=True,
+            [str(a) for a in args], cwd=cwd, capture_output=True, stdin=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace",
         )
     except FileNotFoundError as e:

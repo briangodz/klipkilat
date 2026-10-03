@@ -26,3 +26,13 @@ def test_buat_zip(tmp_path):
     path_zip = paket.buat_zip(hasil, tmp_path / "hasil.zip")
     with zipfile.ZipFile(path_zip) as z:
         assert sorted(z.namelist()) == ["klip_01.mp4", "momen.md"]
+
+
+def test_zip_mp4_tidak_dikompres_ulang(tmp_path):
+    hasil = tmp_path / "hasil"
+    hasil.mkdir()
+    (hasil / "klip_01.mp4").write_bytes(b"video" * 100)
+    (hasil / "momen.md").write_text("isi " * 100, encoding="utf-8")
+    with zipfile.ZipFile(paket.buat_zip(hasil, tmp_path / "hasil.zip")) as z:
+        assert z.getinfo("klip_01.mp4").compress_type == zipfile.ZIP_STORED
+        assert z.getinfo("momen.md").compress_type == zipfile.ZIP_DEFLATED

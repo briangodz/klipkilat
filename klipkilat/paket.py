@@ -27,5 +27,7 @@ def buat_zip(folder_hasil: Path, path_zip: Path) -> Path:
     with zipfile.ZipFile(path_zip, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(folder_hasil.rglob("*")):
             if f.is_file():
-                z.write(f, f.relative_to(folder_hasil).as_posix())
+                # mp4 sudah terkompresi; DEFLATE hanya memperlambat tanpa memperkecil.
+                jenis = zipfile.ZIP_STORED if f.suffix.lower() == ".mp4" else zipfile.ZIP_DEFLATED
+                z.write(f, f.relative_to(folder_hasil).as_posix(), compress_type=jenis)
     return path_zip

@@ -63,7 +63,7 @@ def render_klip(video: Video, momen: Momen, path_ass: Path, gaya: str, keluaran:
         "-ss", f"{momen.mulai:.3f}", "-i", str(Path(video.path_video).resolve()),
         "-t", f"{momen.durasi:.3f}",
         "-filter_complex", filter_video,
-        "-map", "[v]", "-map", "0:a?",
+        "-map", "[v]", "-map", "0:a:0?",
         "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",

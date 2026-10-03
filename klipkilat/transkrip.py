@@ -1,11 +1,13 @@
 """Mengubah audio menjadi transkrip dengan timestamp per kata (faster-whisper)."""
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
 import os
 from pathlib import Path
+from typing import Callable
 
 from .kesalahan import KlipKilatError
 from .model import Kata, Segmen, Transkrip, Video
@@ -50,7 +52,8 @@ def muat(path: Path) -> Transkrip:
     return Transkrip.dari_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
-def _whisper(audio: Path, bahasa: str, perangkat: str, nama_model: str, compute_type: str) -> Transkrip:
+def _whisper(audio: Path, bahasa: str, perangkat: str, nama_model: str, compute_type: str,
+             kemajuan: Callable[[str], None] | None = None) -> Transkrip:
     from faster_whisper import WhisperModel
 
     model = WhisperModel(nama_model, device=perangkat, compute_type=compute_type)
@@ -59,17 +62,25 @@ def _whisper(audio: Path, bahasa: str, perangkat: str, nama_model: str, compute_
         language=None if bahasa == "auto" else bahasa,
         word_timestamps=True,
         vad_filter=True,
+        condition_on_previous_text=False,
     )
     segmen = []
+    puluhan_terakhir = 0
     for s in hasil:
         kata = [Kata(w.word.strip(), float(w.start), float(w.end)) for w in (s.words or []) if w.word.strip()]
         if kata:
             segmen.append(Segmen(s.text.strip(), float(s.start), float(s.end), kata))
+        if kemajuan and info.duration:
+            persen = min(100, int(s.end / info.duration * 100))
+            if persen // 10 > puluhan_terakhir:
+                puluhan_terakhir = persen // 10
+                kemajuan(f"📝 Transkrip {persen}%")
     return Transkrip(info.language, float(info.duration), segmen)
 
 
 def buat_transkrip(video: Video, bahasa: str, perangkat: str, folder_kerja: Path,
-                   nama_model: str | None = None, transkriptor=None) -> Transkrip:
+                   nama_model: str | None = None, transkriptor=None,
+                   kemajuan: Callable[[str], None] | None = None) -> Transkrip:
     model_bawaan, compute_type = pilih_model(perangkat)
     nama_model = nama_model or model_bawaan
     kunci = f"{_hash_file(video.path_audio)[:12]}_{bahasa}_{nama_model}"
@@ -86,7 +97,8 @@ def buat_transkrip(video: Video, bahasa: str, perangkat: str, folder_kerja: Path
 
     log.info("Transkrip dengan model %s di %s", nama_model, perangkat)
     try:
-        tr = (transkriptor or _whisper)(video.path_audio, bahasa, perangkat, nama_model, compute_type)
+        transkriptor = transkriptor or functools.partial(_whisper, kemajuan=kemajuan)
+        tr = transkriptor(video.path_audio, bahasa, perangkat, nama_model, compute_type)
     except KlipKilatError:
         raise
     except Exception as e:
