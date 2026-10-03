@@ -1,16 +1,40 @@
 """Menentukan momen yang dijadikan klip: dari timestamp manual atau dari Gemini."""
 from __future__ import annotations
 
+import json
 import logging
 import re
+from typing import Callable
 
-from .kesalahan import KlipKilatError
+from .kesalahan import GagalAI, KlipKilatError
 from .model import Momen, Segmen, Transkrip, format_jam
 
 log = logging.getLogger("klipkilat")
 
 PADDING = 0.3
 CONTOH_MANUAL = "01:23:10-01:24:00, 02:05:00-02:05:45"
+
+MODEL_GEMINI = "gemini-3.8-flash"  # Flash stabil terbaru berkuota gratis per dokumen Google (Task 6 Step 1)
+PERCOBAAN_AI = 3
+
+PROMPT = """Kamu adalah editor video pendek (TikTok/Reels/Shorts) yang jago menemukan momen viral.
+Di bawah ini transkrip video berjudul "{judul}". Setiap baris diawali waktu mulai [jj:mm:dd].
+
+Pilih {jumlah} momen terbaik untuk dijadikan klip pendek. Syarat setiap momen:
+- Berdiri sendiri: penonton paham tanpa menonton video lengkapnya.
+- Punya "hook" kuat di beberapa detik pertama (mengejutkan, lucu, kontroversial, emosional, atau informasi berharga).
+- Durasi antara {dmin} dan {dmaks} detik.
+- Tidak saling bertumpuk.
+Urutkan dari momen yang paling berpotensi viral.
+
+Jawab HANYA dengan JSON berupa daftar objek dengan kunci:
+"judul" (judul klip yang menarik, maksimal 60 karakter), "mulai_detik" (angka), "selesai_detik" (angka),
+"alasan" (1 kalimat kenapa momen ini menarik).
+Tulis "judul" dan "alasan" dalam bahasa yang sama dengan transkrip.
+
+TRANSKRIP:
+{transkrip}
+"""
 
 
 def parse_waktu(teks: str) -> float:
@@ -121,3 +145,78 @@ def rapikan(momen_list: list[Momen], transkrip: Transkrip, dmin: float, dmaks: f
         m.mulai = round(max(0.0, m.mulai - PADDING), 3)
         m.selesai = round(min(transkrip.durasi, m.selesai + PADDING), 3)
     return hasil
+
+
+def _format_transkrip(transkrip: Transkrip) -> str:
+    return "\n".join(f"[{format_jam(s.mulai)}] {s.teks}" for s in transkrip.segmen)
+
+
+def _ambil_json(teks: str) -> list:
+    teks = re.sub(r"^```(?:json)?\s*|\s*```$", "", teks.strip())
+    data = json.loads(teks)
+    if isinstance(data, dict):
+        data = next((v for v in data.values() if isinstance(v, list)), None)
+    if not isinstance(data, list):
+        raise ValueError("JSON bukan daftar momen")
+    return data
+
+
+def _ke_momen(item) -> Momen | None:
+    try:
+        return Momen(
+            str(item.get("judul") or "Momen").strip()[:80],
+            float(item["mulai_detik"]),
+            float(item["selesai_detik"]),
+            str(item.get("alasan") or "").strip(),
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+
+def pilih_dengan_ai(transkrip: Transkrip, jumlah: int, dmin: float, dmaks: float,
+                    panggil_llm: Callable[[str], str], judul_video: str = "") -> list[Momen]:
+    prompt = PROMPT.format(judul=judul_video or "tanpa judul", jumlah=jumlah, dmin=int(dmin),
+                           dmaks=int(dmaks), transkrip=_format_transkrip(transkrip))
+    for percobaan in range(1, PERCOBAAN_AI + 1):
+        jawaban = panggil_llm(prompt)
+        try:
+            data = _ambil_json(jawaban)
+        except ValueError as e:
+            log.warning("Percobaan %d: jawaban Gemini bukan JSON yang valid (%s): %.300s", percobaan, e, jawaban)
+            continue
+        kandidat = [m for m in (_ke_momen(x) for x in data) if m is not None]
+        hasil = rapikan(kandidat, transkrip, dmin, dmaks)[:jumlah]
+        if hasil:
+            return hasil
+        log.warning("Percobaan %d: tidak ada momen valid dari %d kandidat", percobaan, len(kandidat))
+    raise GagalAI("format", f"AI tidak memberikan momen yang valid setelah {PERCOBAAN_AI} kali mencoba.")
+
+
+def _klasifikasi_error(e: Exception) -> GagalAI:
+    kode = getattr(e, "code", None)
+    pesan = str(e)
+    if kode == 429 or "RESOURCE_EXHAUSTED" in pesan:
+        return GagalAI("kuota", "Kuota gratis API Gemini sedang habis. Coba lagi nanti atau besok.", pesan)
+    if kode in (401, 403) or (kode == 400 and "API key" in pesan):
+        return GagalAI("key", "API key Gemini tidak valid. Buat key baru di https://aistudio.google.com/apikey "
+                              "lalu tempel ulang.", pesan)
+    return GagalAI("lain", "Gagal menghubungi Gemini.", f"{type(e).__name__}: {pesan}")
+
+
+def buat_klien_gemini(api_key: str, model: str = MODEL_GEMINI) -> Callable[[str], str]:
+    def panggil(prompt: str) -> str:
+        try:
+            from google import genai
+            from google.genai import types
+
+            klien = genai.Client(api_key=api_key)
+            respons = klien.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.4),
+            )
+            return respons.text or ""
+        except Exception as e:
+            raise _klasifikasi_error(e) from e
+
+    return panggil
