@@ -38,12 +38,15 @@ TRANSKRIP:
 
 
 def parse_waktu(teks: str) -> float:
-    bagian = teks.strip().split(":")
-    if not 1 <= len(bagian) <= 3 or any(b.strip() == "" for b in bagian):
+    """'90', '01:30', '1:02:03', atau format titik '01.30', '1.02.03' → detik."""
+    bagian = re.split(r"[:.]", teks.strip())
+    if not 1 <= len(bagian) <= 3 or not all(re.fullmatch(r"\d+", b) for b in bagian):
         raise ValueError(f"format waktu tidak dikenali: {teks!r}")
+    if any(int(b) >= 60 for b in bagian[1:]):
+        raise ValueError(f"menit/detik harus di bawah 60: {teks!r}")
     detik = 0.0
     for b in bagian:
-        detik = detik * 60 + float(b)
+        detik = detik * 60 + int(b)
     return detik
 
 
@@ -54,7 +57,7 @@ def dari_teks_manual(teks: str, transkrip: Transkrip) -> list[Momen]:
     daftar = []
     for i, p in enumerate(potongan, 1):
         try:
-            awal, akhir = p.split("-")
+            awal, akhir = re.split(r"\s*[-–—]\s*", p)
             daftar.append(Momen(f"Klip {i}", parse_waktu(awal), parse_waktu(akhir), "Dipilih manual"))
         except ValueError:
             raise KlipKilatError(

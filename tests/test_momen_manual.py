@@ -20,12 +20,14 @@ def _rentang(daftar):
     return [(pytest.approx(m.mulai), pytest.approx(m.selesai)) for m in daftar]
 
 
-@pytest.mark.parametrize("teks,detik", [("90", 90), ("01:30", 90), ("1:02:03", 3723), (" 0:05 ", 5)])
+@pytest.mark.parametrize("teks,detik", [
+    ("90", 90), ("01:30", 90), ("1:02:03", 3723), (" 0:05 ", 5), ("01.30", 90), ("1.02.03", 3723),
+])
 def test_parse_waktu(teks, detik):
     assert momen.parse_waktu(teks) == detik
 
 
-@pytest.mark.parametrize("teks", ["", "abc", "1:2:3:4", "01:"])
+@pytest.mark.parametrize("teks", ["", "abc", "1:2:3:4", "01:", "nan", "1e2", "1:75", "-5", "1:02.5.3"])
 def test_parse_waktu_salah(teks):
     with pytest.raises(ValueError):
         momen.parse_waktu(teks)
@@ -37,11 +39,22 @@ def test_manual_dirapikan_ke_batas_segmen(tr):
     assert _rentang(hasil) == [(3.7, 15.3), (14.7, 22.3)]
 
 
+def test_manual_format_titik(buat_tr):
+    tr = buat_tr([(80, 88, "a b c d"), (88, 100, "e f g h i"), (100, 134, "j k l m n"),
+                  (134, 140, "o p q"), (140, 150, "r s t")], durasi=160)
+    assert _rentang(momen.dari_teks_manual("01.30-02.15", tr)) == [(87.7, 140.3)]
+
+
+@pytest.mark.parametrize("pisah", ["–", "—", " - ", " – "])
+def test_manual_tanda_pisah_en_dan_em(tr, pisah):
+    assert _rentang(momen.dari_teks_manual(f"00:05{pisah}00:12", tr)) == [(3.7, 15.3)]
+
+
 def test_manual_baris_baru_juga_pemisah(tr):
     assert len(momen.dari_teks_manual("00:05-00:12\n0:16-0:21", tr)) == 2
 
 
-@pytest.mark.parametrize("teks", ["abc", "00:05", "00:05-00:10-00:12"])
+@pytest.mark.parametrize("teks", ["abc", "00:05", "00:05-00:10-00:12", "nan-00:10", "1e1-2e1", "00:05-1:75"])
 def test_manual_format_salah(tr, teks):
     with pytest.raises(KlipKilatError) as info:
         momen.dari_teks_manual(teks, tr)
