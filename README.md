@@ -37,6 +37,7 @@
 - **GPU belum aktif**: Runtime → Change runtime type → T4 GPU.
 - **YouTube gagal diunduh**: upload videonya sendiri atau taruh di Google Drive.
 - **Kuota Gemini habis**: isi `timestamp_manual`. Transkrip tidak dibuat ulang.
+- **`hasil.zip` tidak terunduh otomatis**: buka panel 📁 di kiri Colab → `klipkilat_kerja` → klik kanan `hasil.zip` → Download.
 - **Bug lain**: buka [Issue](https://github.com/briangodz/klipkilat/issues) dan lampirkan `log.txt`.
 
 ## ⚠️ Etika

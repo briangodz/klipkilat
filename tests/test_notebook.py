@@ -1,4 +1,5 @@
 import dataclasses
+import importlib.util
 import json
 from pathlib import Path
 
@@ -36,3 +37,19 @@ def test_semua_pengaturan_diteruskan():
 
 def test_menginstal_dari_repo_ini():
     assert "git+https://github.com/briangodz/klipkilat" in _kode(_nb())[0]
+
+
+def test_notebook_sesuai_script_pembuatnya():
+    path = NOTEBOOK.parent / "scripts" / "buat_notebook.py"
+    spec = importlib.util.spec_from_file_location("buat_notebook", path)
+    modul = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modul)
+    assert modul.buat_notebook() == _nb(), "Jalankan ulang: python scripts/buat_notebook.py"
+
+
+def test_unduhan_didahulukan_dan_drive_tidak_membuat_traceback():
+    sel = _kode(_nb())[1]
+    assert sel.index("files.download(") < sel.index("shutil.copy(hasil.path_zip")
+    assert "Google Drive tidak bisa dihubungkan" in sel
+    assert "Unduhan otomatis gagal" in sel
+    assert "Video tersimpan di" in sel

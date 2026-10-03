@@ -55,11 +55,18 @@ from klipkilat.kesalahan import KlipKilatError
 from klipkilat.pipeline import Pengaturan, jalankan
 
 FOLDER_KERJA = Path("/content/klipkilat_kerja")
-sumber = sumber.strip()
+sumber = sumber.strip().strip("\"'")
 
+drive_gagal = False
 if sumber.startswith("/content/drive") or simpan_ke_drive:
-    from google.colab import drive
-    drive.mount("/content/drive")
+    try:
+        from google.colab import drive
+        drive.mount("/content/drive")
+    except Exception:
+        print("❌ Google Drive tidak bisa dihubungkan (izin ditolak atau gagal). Jalankan ulang sel ini "
+              "dan pilih Izinkan, atau pakai link YouTube/upload.")
+        drive_gagal = sumber.startswith("/content/drive")
+        simpan_ke_drive = False
 
 if not gemini_api_key.strip():
     try:
@@ -72,8 +79,13 @@ if not sumber:
     print("📤 Pilih file video yang mau diupload...")
     unggahan = files.upload()
     sumber = str(Path.cwd() / next(iter(unggahan))) if unggahan else ""
+    if sumber:
+        print(f"ℹ️ Video tersimpan di {sumber}. Kalau mau menjalankan ulang tanpa upload lagi, "
+              "tempel path ini ke kolom sumber.")
 
-if not sumber:
+if drive_gagal:
+    pass  # pesan ❌ Google Drive sudah ditampilkan di atas
+elif not sumber:
     print("❌ Tidak ada video. Isi kolom sumber atau upload file.")
 else:
     try:
@@ -99,19 +111,27 @@ else:
             print("\n⚠️ Klip yang gagal:")
             for g in hasil.klip_gagal:
                 print("  -", g)
+        try:
+            files.download(str(hasil.path_zip))
+        except Exception:
+            print("⚠️ Unduhan otomatis gagal. Buka panel 📁 di kiri → klipkilat_kerja → hasil.zip "
+                  "→ klik kanan → Download.")
         if simpan_ke_drive:
-            tujuan = Path("/content/drive/MyDrive/KlipKilat")
-            tujuan.mkdir(parents=True, exist_ok=True)
-            nama = f"hasil_{datetime.now():%Y%m%d_%H%M%S}.zip"
-            shutil.copy(hasil.path_zip, tujuan / nama)
-            print(f"💾 Disalin ke Google Drive: MyDrive/KlipKilat/{nama}")
-        files.download(str(hasil.path_zip))
+            try:
+                tujuan = Path("/content/drive/MyDrive/KlipKilat")
+                tujuan.mkdir(parents=True, exist_ok=True)
+                nama = f"hasil_{datetime.now():%Y%m%d_%H%M%S}.zip"
+                shutil.copy(hasil.path_zip, tujuan / nama)
+                print(f"💾 Disalin ke Google Drive: MyDrive/KlipKilat/{nama}")
+            except Exception as e:
+                print(f"⚠️ Gagal menyalin ke Google Drive ({e}). hasil.zip tetap ada di {FOLDER_KERJA}.")
 '''
 
 MASALAH = """## 🛠️ Kalau ada masalah
 - **GPU belum aktif** → Runtime → Change runtime type → T4 GPU → Save, lalu jalankan ulang dari sel 1.
 - **Gagal mengunduh dari YouTube** → unduh videonya sendiri, lalu upload (kosongkan `sumber`) atau taruh di Google Drive.
 - **Kuota Gemini habis / key tidak valid** → isi `timestamp_manual`, lalu jalankan ulang sel 2. Transkrip tidak dibuat ulang selama runtime belum dihapus.
+- **`hasil.zip` tidak terunduh otomatis** → buka panel 📁 di kiri → `klipkilat_kerja` → klik kanan `hasil.zip` → Download.
 - **Sesi terputus** → jalankan ulang sel 1 dan sel 2.
 - **Bug lain** → laporkan di https://github.com/briangodz/klipkilat/issues dan lampirkan `log.txt` (ada di dalam `hasil.zip` atau di `/content/klipkilat_kerja/log.txt`).
 """
@@ -126,8 +146,8 @@ def _sel(jenis: str, teks: str) -> dict:
     return sel
 
 
-def main() -> None:
-    nb = {
+def buat_notebook() -> dict:
+    return {
         "nbformat": 4,
         "nbformat_minor": 0,
         "metadata": {
@@ -143,8 +163,12 @@ def main() -> None:
             _sel("markdown", MASALAH),
         ],
     }
+
+
+def main() -> None:
     tujuan = Path(__file__).resolve().parents[1] / "KlipKilat.ipynb"
-    tujuan.write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    tujuan.write_text(json.dumps(buat_notebook(), ensure_ascii=False, indent=1) + "\n",
+                      encoding="utf-8", newline="\n")
     print(f"Ditulis: {tujuan}")
 
 
