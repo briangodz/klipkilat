@@ -1,4 +1,7 @@
 import shutil
+import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -67,3 +70,80 @@ def test_url_gagal_dua_kali(tmp_path):
     assert len(panggilan) == 2
     assert "YouTube" in info.value.pesan_pengguna
     assert "not a bot" in info.value.detail_teknis
+
+
+def test_error_klipkilat_dari_pengunduh_tidak_dicoba_ulang(tmp_path):
+    panggilan = []
+
+    def unduh(url, folder):
+        panggilan.append(url)
+        raise KlipKilatError("Live stream ini masih berlangsung.")
+
+    with pytest.raises(KlipKilatError) as info:
+        sumber.ambil_video("https://youtu.be/abc", tmp_path, pengunduh=unduh, jeda=0)
+    assert len(panggilan) == 1
+    assert "Live" in info.value.pesan_pengguna
+
+
+@pytest.mark.parametrize("kutip", ['"', "'"])
+def test_path_lokal_berkutip(video_sintetis, tmp_path, kutip):
+    v = sumber.ambil_video(f" {kutip}{video_sintetis}{kutip} ", tmp_path)
+    assert v.path_video == video_sintetis
+
+
+class YDLPalsu:
+    """Pengganti yt_dlp.YoutubeDL: tidak pernah menyentuh internet."""
+
+    info = {}
+    unduhan = []
+
+    def __init__(self, opsi):
+        self.opsi = opsi
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def extract_info(self, url, download=False):
+        assert not download
+        return dict(self.info)
+
+    def process_ie_result(self, info, download=True):
+        path = Path(self.opsi["outtmpl"].replace("%(id)s", info["id"]).replace("%(ext)s", "mp4"))
+        path.write_bytes(b"video palsu")
+        YDLPalsu.unduhan.append(path)
+        return {**info, "requested_downloads": [{"filepath": str(path)}]}
+
+
+@pytest.fixture
+def ydl_palsu(monkeypatch):
+    monkeypatch.setattr(YDLPalsu, "info", {"id": "abc123", "title": "Judul YT", "live_status": "was_live"})
+    monkeypatch.setattr(YDLPalsu, "unduhan", [])
+    monkeypatch.setitem(sys.modules, "yt_dlp", SimpleNamespace(YoutubeDL=YDLPalsu))
+    return YDLPalsu
+
+
+def test_unduh_youtube_memakai_ulang_file_yang_sudah_ada(ydl_palsu, tmp_path):
+    lain = tmp_path / "video_sumber_lain.mp4"
+    lain.write_bytes(b"video lain")
+    (tmp_path / "video_sumber_abc123.f137.mp4").write_bytes(b"sisa unduhan")
+
+    pertama = sumber._unduh_youtube("https://youtu.be/abc123", tmp_path)
+    kedua = sumber._unduh_youtube("https://youtu.be/abc123", tmp_path)
+
+    assert pertama == kedua == (tmp_path / "video_sumber_abc123.mp4", "Judul YT")
+    assert len(ydl_palsu.unduhan) == 1
+    assert lain.exists()
+
+
+@pytest.mark.parametrize("info", [
+    {"is_live": True}, {"live_status": "is_live"}, {"live_status": "is_upcoming"}, {"live_status": "post_live"},
+])
+def test_unduh_youtube_menolak_live(ydl_palsu, tmp_path, monkeypatch, info):
+    monkeypatch.setattr(YDLPalsu, "info", {"id": "abc123", "title": "Live", **info})
+    with pytest.raises(KlipKilatError) as e:
+        sumber._unduh_youtube("https://youtu.be/abc123", tmp_path)
+    assert "Live stream" in e.value.pesan_pengguna
+    assert ydl_palsu.unduhan == []
